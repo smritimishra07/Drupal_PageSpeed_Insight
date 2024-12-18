@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 
-# Debug: Print the loaded API key
 if not API_KEY:
     raise ValueError("API_KEY is not set. Please check your .env file.")
 else:
@@ -17,36 +16,63 @@ def fetch_pagespeed_insights(url):
     """
     Fetches PageSpeed Insights data for the given URL and saves it as a JSON file.
     """
-    # API endpoint
     api_url = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
-    
-    # Parameters
     params = {
         "url": url,
         "key": API_KEY,
-        "strategy": "mobile"  # You can change this to "desktop"
+        "strategy": "desktop"  # You can change this to "desktop"
     }
     
     try:
-        # Make the API request
         response = requests.get(api_url, params=params)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-
-        # Get the JSON data
+        response.raise_for_status()
         data = response.json()
         
-        # Save JSON data to a file
-        output_file = "output/pagespeed_insights.json"
+        # Ensure the output directory exists
+        output_dir = "output"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Save raw JSON data to a file
+        output_file = os.path.join(output_dir, "pagespeed_insights.json")
         with open(output_file, "w") as json_file:
             json.dump(data, json_file, indent=4)
         
         print(f"Data fetched successfully! JSON saved as {output_file}.")
+        
+        # Parse the JSON for metrics with savings > 0
+        parse_report(data)
+        
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data: {e}")
 
-if __name__ == "__main__":
-    # Input the Drupal website URL
-    website_url = input("Enter the Drupal website URL (including https:// or http://): ").strip()
+def parse_report(data):
+    """
+    Parses the PageSpeed Insights report and displays IDs with saving-matrix > 0 for various parameters.
+    """
+    print("\nParsing report for metrics with savings > 0...\n")
     
-    # Fetch the PageSpeed Insights data
+    results = []
+    audits = data.get("lighthouseResult", {}).get("audits", {})
+
+    for audit_id, audit_data in audits.items():
+        # Check if 'metricSavings' exists and contains an 'LCP' key
+        metric_savings = audit_data.get("metricSavings", {})
+        lcp_value = metric_savings.get("LCP", 0)
+        fcp_value = metric_savings.get("FCP", 0)
+        tbt_value = metric_savings.get("TBT", 0)
+        cls_value = metric_savings.get("CLS", 0)
+
+        # Add to results if LCP > 0
+        if any(value > 0 for value in [lcp_value, fcp_value, tbt_value, cls_value]):
+            #print(audit_data.get("id"))
+            results.append({
+                "id": audit_data.get("id"),
+                "title": audit_data.get("title"),
+                "metric_savings":audit_data.get("metricSavings", {}),
+                "details": audit_data.get("details", {}).get("items", [])
+            })
+    
+    print(results)
+if __name__ == "__main__":
+    website_url = input("Enter the Drupal website URL (including https:// or http://): ").strip()
     fetch_pagespeed_insights(website_url)
