@@ -48,6 +48,7 @@ def fetch_pagespeed_insights(url):
 def parse_report(data):
     """
     Parses the PageSpeed Insights report and displays IDs with saving-matrix > 0 for various parameters.
+    Categorizes issues into predefined criteria.
     """
     print("\nParsing report for metrics with savings > 0...\n")
     
@@ -55,24 +56,62 @@ def parse_report(data):
     audits = data.get("lighthouseResult", {}).get("audits", {})
 
     for audit_id, audit_data in audits.items():
-        # Check if 'metricSavings' exists and contains an 'LCP' key
+        # Check if 'metricSavings' exists and contains any savings
         metric_savings = audit_data.get("metricSavings", {})
-        lcp_value = metric_savings.get("LCP", 0)
-        fcp_value = metric_savings.get("FCP", 0)
-        tbt_value = metric_savings.get("TBT", 0)
-        cls_value = metric_savings.get("CLS", 0)
-
-        # Add to results if LCP > 0
-        if any(value > 0 for value in [lcp_value, fcp_value, tbt_value, cls_value]):
-            #print(audit_data.get("id"))
+        if metric_savings and any(value > 0 for value in metric_savings.values()):
+            # Categorize issue
+            category = categorize_issue(audit_id)
             results.append({
                 "id": audit_data.get("id"),
                 "title": audit_data.get("title"),
-                "metric_savings":audit_data.get("metricSavings", {}),
+                "category": category,
+                "metric_savings": metric_savings,
                 "details": audit_data.get("details", {}).get("items", [])
             })
     
-    print(results)
+    if results:
+        for result in results:
+            print(f"Issue ID: {result['id']}")
+            print(f"Title: {result['title']}")
+            print(f"Category: {result['category']}")
+            print(f"Metric Savings: {result['metric_savings']}")
+            print("-" * 50)
+    else:
+        print("No audits found with savings greater than zero.")
+
+def categorize_issue(audit_id):
+    """
+    Categorizes the issue based on the audit ID.
+    """
+    server_side_issues = [
+        "uses-text-compression", "server-response-time", "uses-long-cache-ttl"
+    ]
+    client_side_issues = [
+        "uses-optimized-images", "uses-responsive-images", "efficient-animated-content"
+    ]
+    configuration_issues = [
+        "redirects", "uses-http2", "no-document-write"
+    ]
+    custom_code_issues = [
+        "render-blocking-resources", "unused-css-rules", "unused-javascript"
+    ]
+    third_party_dependencies_issues = [
+        "third-party-summary", "legacy-javascript"
+    ]
+
+    if audit_id in server_side_issues:
+        return "Server-side"
+    elif audit_id in client_side_issues:
+        return "Client-side"
+    elif audit_id in configuration_issues:
+        return "Configuration"
+    elif audit_id in custom_code_issues:
+        return "Custom Code"
+    elif audit_id in third_party_dependencies_issues:
+        return "Third-party Dependencies"
+    else:
+        return "Uncategorized"
+
 if __name__ == "__main__":
     website_url = input("Enter the Drupal website URL (including https:// or http://): ").strip()
     fetch_pagespeed_insights(website_url)
